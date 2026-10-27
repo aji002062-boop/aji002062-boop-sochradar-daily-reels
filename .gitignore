@@ -1,0 +1,5 @@
+output/
+.env
+rclone.conf
+*.token
+__pycache__/
