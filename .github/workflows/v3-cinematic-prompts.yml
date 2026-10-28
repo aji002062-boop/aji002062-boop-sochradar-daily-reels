@@ -1,0 +1,61 @@
+name: SochRadar V3 Daily Cinematic Prompt Pack
+on:
+  schedule:
+    - cron: '30 17 * * *'
+      timezone: 'Asia/Kolkata'
+  workflow_dispatch:
+    inputs:
+      demo:
+        description: 'Sample prompt pack only (no Gemini / Drive / Instagram)'
+        type: boolean
+        default: true
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: sochradar-v3-one-prompt-pack-per-day
+  cancel-in-progress: false
+jobs:
+  make-v3-prompts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || '' }}
+      RCLONE_CONFIG_B64: ${{ secrets.RCLONE_CONFIG_B64 }}
+      RCLONE_CONFIG_FILE: /tmp/sochradar-v3-rclone.conf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install helper tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq rclone
+          python -m pip install requests
+      - name: Restore Rclone config securely
+        shell: bash
+        run: |
+          if [ -n "$RCLONE_CONFIG_B64" ]; then
+            printf '%s' "$RCLONE_CONFIG_B64" | base64 --decode > "$RCLONE_CONFIG_FILE"
+            chmod 600 "$RCLONE_CONFIG_FILE"
+          fi
+      - name: Generate V3 cinematic prompts only (NO VIDEO / NO POST)
+        shell: bash
+        env:
+          DEMO: ${{ github.event_name == 'workflow_dispatch' && inputs.demo || false }}
+        run: |
+          if [ "$DEMO" = 'true' ]; then
+            python cinematic_v3/generate.py --demo
+          else
+            python cinematic_v3/generate.py
+          fi
+      - name: Attach prompt pack for download
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sochradar-v3-prompts
+          path: cinematic_v3/output/**
+          if-no-files-found: warn
+          retention-days: 7
